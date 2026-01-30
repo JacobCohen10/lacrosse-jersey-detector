@@ -1,0 +1,12 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+pydantic>=2.9.0
+pillow>=10.4.0
+numpy>=1.26.0
+ultralytics>=8.3.0
+easyocr>=1.7.0
+opencv-python>=4.8.0
+ffmpeg-python>=0.2.0
+aiofiles>=23.2.0
+# Optional (strongest OCR): pip install paddlepaddle paddleocr — requires Python 3.8–3.12 on supported platforms. Then set OCR_ENGINE=paddleocr.
