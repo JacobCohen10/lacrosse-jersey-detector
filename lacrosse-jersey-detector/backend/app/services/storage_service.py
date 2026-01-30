@@ -8,6 +8,10 @@ from app.config import UPLOADS_DIR, RESULTS_DIR
 from app.api.models import AnalysisResult
 
 
+# Video file extensions we accept (must match upload validation)
+VIDEO_EXTENSIONS = (".mp4", ".mov")
+
+
 class StorageService:
     """Handles file system operations for videos and results."""
     
@@ -16,12 +20,18 @@ class StorageService:
         self.results_dir = RESULTS_DIR
     
     def video_exists(self, video_id: str) -> bool:
-        """Check if a video file exists."""
-        video_path = self.uploads_dir / f"{video_id}.mp4"
-        return video_path.exists()
+        """Check if a video file exists (any supported extension)."""
+        for ext in VIDEO_EXTENSIONS:
+            if (self.uploads_dir / f"{video_id}{ext}").exists():
+                return True
+        return False
     
     def get_video_path(self, video_id: str) -> Path:
-        """Get the path to a video file."""
+        """Get the path to a video file (any supported extension)."""
+        for ext in VIDEO_EXTENSIONS:
+            path = self.uploads_dir / f"{video_id}{ext}"
+            if path.exists():
+                return path
         return self.uploads_dir / f"{video_id}.mp4"
     
     def save_analysis_result(self, result: AnalysisResult):

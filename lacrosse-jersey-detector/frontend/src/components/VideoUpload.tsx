@@ -14,12 +14,15 @@ const VideoUpload: React.FC<VideoUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  const isVideoFile = (file: File) =>
+    file.type === 'video/mp4' || file.type === 'video/quicktime' || /\.(mp4|mov)$/i.test(file.name);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type === 'video/mp4') {
+    if (file && isVideoFile(file)) {
       onFileSelect(file);
     } else {
-      alert('Please select an MP4 video file');
+      alert('Please select an MP4 or MOV video file');
     }
   };
 
@@ -38,10 +41,10 @@ const VideoUpload: React.FC<VideoUploadProps> = ({
     setIsDragging(false);
 
     const file = e.dataTransfer.files[0];
-    if (file && file.type === 'video/mp4') {
+    if (file && isVideoFile(file)) {
       onFileSelect(file);
     } else {
-      alert('Please drop an MP4 video file');
+      alert('Please drop an MP4 or MOV video file');
     }
   };
 
@@ -67,7 +70,7 @@ const VideoUpload: React.FC<VideoUploadProps> = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="video/mp4"
+          accept="video/mp4,video/quicktime,.mp4,.mov"
           onChange={handleFileChange}
           className="hidden"
           disabled={disabled}
@@ -91,7 +94,7 @@ const VideoUpload: React.FC<VideoUploadProps> = ({
               ? `Selected: ${selectedFile.name}`
               : 'Click to upload or drag and drop'}
           </p>
-          <p className="text-xs text-gray-500">MP4 video files only</p>
+          <p className="text-xs text-gray-500">MP4 or MOV video files</p>
         </div>
       </div>
     </div>

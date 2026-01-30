@@ -42,11 +42,11 @@ async def upload_video(file: UploadFile = File(...)):
     """
     Upload a video file.
     
-    Accepts MP4 video files and stores them for analysis.
+    Accepts MP4 and MOV video files and stores them for analysis.
     """
     # Validate file type
-    if not file.filename.endswith(('.mp4', '.MP4')):
-        raise HTTPException(status_code=400, detail="Only MP4 files are supported")
+    if not file.filename or not file.filename.lower().endswith(('.mp4', '.mov')):
+        raise HTTPException(status_code=400, detail="Only MP4 and MOV video files are supported")
     
     # Generate video ID
     video_id = str(uuid.uuid4())

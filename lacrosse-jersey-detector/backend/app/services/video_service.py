@@ -24,7 +24,10 @@ class VideoService:
         Returns:
             Filename of saved video
         """
-        filename = f"{video_id}.mp4"
+        ext = Path(file.filename).suffix.lower() if file.filename else ".mp4"
+        if ext not in (".mp4", ".mov"):
+            ext = ".mp4"
+        filename = f"{video_id}{ext}"
         file_path = self.uploads_dir / filename
         
         # Check file size
