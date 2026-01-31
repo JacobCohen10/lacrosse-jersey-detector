@@ -42,7 +42,10 @@ MERGE_DIGITS_MIN_CONFIDENCE = float(os.getenv("MERGE_DIGITS_MIN_CONFIDENCE", "0.
 
 # API settings
 API_PREFIX = "/api"
-CORS_ORIGINS = ["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"]
+# CORS: set CORS_ORIGINS env (comma-separated) on Render to your frontend URL(s), e.g. https://your-app.vercel.app
+_default_cors = ["http://localhost:3000", "http://localhost:5173", "http://localhost:5174"]
+_cors_env = os.getenv("CORS_ORIGINS", "").strip()
+CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else _default_cors
 
 # Timestamp aggregation settings
 TIMESTAMP_GROUPING_THRESHOLD = float(os.getenv("TIMESTAMP_GROUPING_THRESHOLD", "2.0"))  # seconds
