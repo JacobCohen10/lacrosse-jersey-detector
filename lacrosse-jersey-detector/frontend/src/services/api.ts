@@ -6,7 +6,10 @@ import type {
   AnalysisResult,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Dev: default to local backend (8000). Production: same origin (Vercel serverless) when unset.
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? 'http://localhost:8000' : '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,

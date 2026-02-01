@@ -15,15 +15,29 @@ from app.config import (
 
 
 class AnalysisService:
-    """Orchestrates the video analysis pipeline."""
+    """Orchestrates the video analysis pipeline.
+    Heavy ML components (PlayerDetector, OCREngine) are lazy-loaded so the app can bind to PORT quickly on Render.
+    """
     
     def __init__(self):
         self.storage_service = StorageService()
         self.frame_extractor = FrameExtractor()
-        self.player_detector = PlayerDetector()
+        self._player_detector = None
         self.jersey_cropper = JerseyCropper()
-        self.ocr_engine = OCREngine()
+        self._ocr_engine = None
         self.timestamp_aggregator = TimestampAggregator()
+    
+    @property
+    def player_detector(self):
+        if self._player_detector is None:
+            self._player_detector = PlayerDetector()
+        return self._player_detector
+    
+    @property
+    def ocr_engine(self):
+        if self._ocr_engine is None:
+            self._ocr_engine = OCREngine()
+        return self._ocr_engine
     
     def _normalize_number(self, number: str) -> str:
         """Normalize jersey number for comparison (remove leading zeros, whitespace)."""

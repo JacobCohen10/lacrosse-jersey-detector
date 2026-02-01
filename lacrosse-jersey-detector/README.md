@@ -142,6 +142,19 @@ The frontend will be available at `http://localhost:5173`
 
 6. **File Storage**: Videos and results are stored locally on the server
 
+## Deploy: Vercel (frontend + serverless API) + Render (analysis)
+
+You can run the **frontend and upload/results API** on Vercel and the **heavy analysis** on Render:
+
+1. **Render**: Deploy the backend (see `backend/README.md`). Set **CORS_ORIGINS** to your Vercel URL (e.g. `https://your-app.vercel.app`).
+2. **Vercel**: Connect this repo. Set **Root Directory** to the repo root (so `api/` and `frontend/` are used).
+3. **Vercel env**: Add **RENDER_API_URL** = your Render URL (e.g. `https://lacrosse-jersey-api.onrender.com`). Create **Vercel Blob** and **Vercel KV** in the dashboard and link them (env vars are added automatically).
+4. **Frontend**: Leave **VITE_API_URL** unset in production so the app uses the same origin (`/api/*` on Vercel).
+
+Flow: Upload → Vercel Blob + KV. Analyze → Vercel calls Render with the video URL; Render downloads the video, runs YOLO+OCR, stores results on Render. Get results → Vercel proxies to Render. See `api/README.md` for API env details.
+
+**Upload size**: Vercel request body limit applies (e.g. 4.5 MB Hobby). For larger videos use a Pro plan or client-side direct upload to Blob.
+
 ## Configuration
 
 ### Backend Environment Variables

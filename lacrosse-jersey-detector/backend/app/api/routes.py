@@ -67,21 +67,32 @@ async def upload_video(file: UploadFile = File(...)):
 async def analyze_video(request: AnalyzeRequest, background_tasks: BackgroundTasks):
     """
     Start analysis of a video for a specific jersey number.
-    
-    Returns a job ID that can be used to poll for results.
+    Supports (1) video_id (local upload) or (2) video_url + job_id (Vercel Blob).
     """
-    # Validate video exists
-    if not storage_service.video_exists(request.video_id):
-        raise HTTPException(status_code=404, detail="Video not found")
+    if request.video_url and request.job_id:
+        # Vercel hybrid: download from Blob URL, then analyze with video_id=job_id
+        try:
+            await video_service.save_video_from_url(request.video_url, request.job_id)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch video: {e}")
+        job_id = request.job_id
+        video_id = request.job_id
+    elif request.video_id:
+        # Local/Render upload: video already on disk
+        if not storage_service.video_exists(request.video_id):
+            raise HTTPException(status_code=404, detail="Video not found")
+        job_id = str(uuid.uuid4())
+        video_id = request.video_id
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide either video_id (local) or both video_url and job_id (Vercel Blob)",
+        )
     
-    # Generate job ID
-    job_id = str(uuid.uuid4())
-    
-    # Start analysis in background
     background_tasks.add_task(
         analysis_service.analyze_video,
         job_id=job_id,
-        video_id=request.video_id,
+        video_id=video_id,
         jersey_number=request.jersey_number,
         fast_mode=request.fast_mode,
     )
