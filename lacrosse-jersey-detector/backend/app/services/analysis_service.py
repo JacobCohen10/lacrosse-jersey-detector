@@ -114,26 +114,26 @@ class AnalysisService:
             # Normalize target jersey number
             target_number = self._normalize_number(jersey_number)
             
-            # Step 1: Extract frames
+            # Step 1: Stream frames one at a time (low memory; no full frame list in RAM)
             extract_interval = FAST_MODE_FRAME_INTERVAL if fast_mode else None
             if fast_mode:
-                print(f"[{job_id}] Fast mode: extracting frames (interval={FAST_MODE_FRAME_INTERVAL}s)...")
+                print(f"[{job_id}] Fast mode: streaming frames (interval={FAST_MODE_FRAME_INTERVAL}s)...")
             else:
-                print(f"[{job_id}] Extracting frames from video...")
-            frames = self.frame_extractor.extract_frames(video_path, interval=extract_interval)
-            print(f"[{job_id}] Extracted {len(frames)} frames")
-            
-            # Step 2-5: Process each frame with ensemble predictions
+                print(f"[{job_id}] Streaming frames from video...")
+
+            # Step 2-5: Process each frame as it is yielded (only one frame in memory at a time)
             frame_detections = []  # List of (frame_idx, timestamp, confidence) for detections
             total_players = 0
             total_ocr_attempts = 0
             detected_numbers = {}  # Track what numbers we're seeing
             rejected_frames = 0  # Track rejected low-confidence frames
-            
-            for frame_idx, frame_data in enumerate(frames):
-                timestamp = frame_data['timestamp']
-                frame_image = frame_data['image']
-                
+            frame_count = 0
+
+            for frame_idx, frame_data in enumerate(self.frame_extractor.iter_frames(video_path, interval=extract_interval)):
+                frame_count = frame_idx + 1
+                timestamp = frame_data["timestamp"]
+                frame_image = frame_data["image"]
+
                 # Detect players (fast mode: higher conf, smaller imgsz)
                 if fast_mode:
                     player_boxes = self.player_detector.detect_players(
@@ -144,106 +144,80 @@ class AnalysisService:
                 else:
                     player_boxes = self.player_detector.detect_players(frame_image)
                 total_players += len(player_boxes)
-                
+
                 # Collect all detections for this frame across all players and crops
                 frame_target_detections = []  # List of (number, confidence) for target number
                 frame_all_detections = []  # All detections for debugging
                 found_high_confidence = False  # Early exit flag
-                
+
                 # For each detected player, try multiple crop regions and OCR strategies
                 for box in player_boxes:
-                    # Early exit: if we already found high confidence detection, skip remaining players
                     if found_high_confidence:
                         break
-                    
-                    # Get multiple crop regions for different angles (1 crop in fast mode)
                     crop_regions = self._get_multiple_crop_regions(frame_image, box, fast_mode=fast_mode)
-                    
-                    # Try OCR on all crop regions (ensemble across crops)
                     for jersey_crop in crop_regions:
                         total_ocr_attempts += 1
                         detected_number, confidence = self.ocr_engine.read_jersey_number(
                             jersey_crop, fast_mode=fast_mode
                         )
-                        
                         if detected_number:
-                            # Track all detected numbers for debugging
                             normalized = self._normalize_number(detected_number)
                             detected_numbers[normalized] = detected_numbers.get(normalized, 0) + 1
                             frame_all_detections.append((normalized, confidence))
-                            
-                            # Track target number detections specifically
                             if normalized == target_number:
                                 frame_target_detections.append((normalized, confidence))
-                                
-                                # Early exit: if we found target with very high confidence, skip remaining crops/players
                                 if confidence >= OCR_EARLY_EXIT_CONFIDENCE:
                                     found_high_confidence = True
                                     break
-                    
-                    # Early exit: break from player loop if high confidence found
                     if found_high_confidence:
                         break
-                
+
                 # Frame-level ensemble: compute frame confidence for target number
                 if frame_target_detections:
-                    # Calculate frame-level confidence (max or mean)
                     confidences = [conf for _, conf in frame_target_detections]
-                    frame_confidence = max(confidences)  # Use max confidence across crops
-                    
-                    # Reject low-confidence frames
+                    frame_confidence = max(confidences)
                     if frame_confidence >= OCR_FRAME_MIN_CONFIDENCE:
                         frame_detections.append((frame_idx, timestamp, frame_confidence))
                     else:
                         rejected_frames += 1
-                
+
                 # Progress update every 10 frames
-                if (frame_idx + 1) % 10 == 0:
-                    print(f"[{job_id}] Processed {frame_idx + 1}/{len(frames)} frames, found {len(frame_detections)} matches, rejected {rejected_frames} low-confidence")
-            
+                if frame_count % 10 == 0:
+                    print(f"[{job_id}] Processed {frame_count} frames, found {len(frame_detections)} matches, rejected {rejected_frames} low-confidence")
+
+            print(f"[{job_id}] Finished streaming. Total frames: {frame_count}")
+
             # Apply temporal consensus: use sliding window approach (more flexible for movement)
             detections = []
             consensus_window = TEMPORAL_CONSENSUS_WINDOW
             min_detections_in_window = TEMPORAL_CONSENSUS_MIN_DETECTIONS
-            
-            # Use a sliding window approach - check if detections occur within a time window
             processed_indices = set()
-            
+
             for i in range(len(frame_detections)):
                 if i in processed_indices:
                     continue
-                    
                 frame_idx, timestamp, confidence = frame_detections[i]
-                
-                # Find all detections within the consensus window
                 window_detections = [timestamp]
                 window_confidences = [confidence]
                 window_indices = [i]
-                
                 for j in range(i + 1, len(frame_detections)):
                     next_frame_idx, next_timestamp, next_confidence = frame_detections[j]
                     time_diff = next_timestamp - timestamp
-                    
-                    # If within window, add to group
                     if time_diff <= consensus_window:
                         window_detections.append(next_timestamp)
                         window_confidences.append(next_confidence)
                         window_indices.append(j)
                     else:
                         break
-                
-                # Accept if we have enough detections in the window
                 if len(window_detections) >= min_detections_in_window:
-                    # Add the first timestamp in the window (to avoid duplicates)
-                    detections.append(timestamp)
-                    # Mark indices as processed
+                    detections.extend(window_detections)
                     for idx in window_indices:
                         processed_indices.add(idx)
-            
-            # Debug output (use this to see if bottleneck is YOLO vs OCR)
-            avg_players_per_frame = total_players / len(frames) if frames else 0
+
+            # Debug output
+            avg_players_per_frame = total_players / frame_count if frame_count else 0
             print(f"[{job_id}] Detection summary:")
-            print(f"  - Frames: {len(frames)}, avg players/frame: {avg_players_per_frame:.1f}")
+            print(f"  - Frames: {frame_count}, avg players/frame: {avg_players_per_frame:.1f}")
             print(f"  - Total players detected: {total_players}")
             print(f"  - OCR attempts: {total_ocr_attempts}")
             print(f"  - Target number: {target_number}")
